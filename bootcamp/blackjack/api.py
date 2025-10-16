@@ -1,84 +1,47 @@
 from ninja import NinjaAPI, Schema
-from typing import Optional, Literal, Dict
-import random
+from typing import List, Optional
+from datetime import datetime
 
-api = NinjaAPI(title="Mini Game API")
+api = NinjaAPI(title="Demo API")
 
+# stockage très simple en mémoire (débutant)
+STUDENTS = []
+SEQ = 0
 
-GAMES: Dict[int, dict] = {}
-GAME_ID = 0
+class StudentIn(Schema):
+    name: str
+    email: str
 
-#  Schémas de validation 
-class StartIn(Schema):
-    player: str
-
-class PlayIn(Schema):
-    game_id: int
-    guess: Literal["heads", "tails"]  # validation très simple
-
-class GameOut(Schema):
+class StudentOut(Schema):
     id: int
-    player: str
-    status: Literal["new", "finished"]
-    last_flip: Optional[str] = None
-    last_guess: Optional[str] = None
-    result: Optional[str] = None        
-    wins: int
-    losses: int
+    name: str
+    email: str
+    created_at: datetime
 
-class Message(Schema):
+class Msg(Schema):
     detail: str
 
+@api.get("/students", response=List[StudentOut])
+def list_students(request):
+    return STUDENTS
 
-#  Endpoints
-@api.post("/start", response={201: GameOut})
-def start(request, data: StartIn):
-    """Créer une partie (pile ou face, 1 coup)."""
-    global GAME_ID
-    GAME_ID += 1
-    game = {
-        "id": GAME_ID,
-        "player": data.player.strip() or "Player",
-        "status": "new",
-        "last_flip": None,
-        "last_guess": None,
-        "result": None,
-        "wins": 0,
-        "losses": 0,
+@api.post("/students", response={201: StudentOut})
+def create_student(request, data: StudentIn):
+    global SEQ
+    SEQ += 1
+    item = {
+        "id": SEQ,
+        "name": data.name,
+        "email": data.email,
+        "created_at": datetime.utcnow(),
     }
-    GAMES[GAME_ID] = game
-    return 201, game
+    STUDENTS.append(item)
+    return 201, item
 
-
-@api.post("/play", response={200: GameOut, 404: Message, 409: Message})
-def play(request, data: PlayIn):
-    """Jouer un coup : deviner heads/tails. Partie ultra courte (un seul coup)."""
-    game = GAMES.get(data.game_id)
-    if not game:
-        return 404, {"detail": "Game not found."}
-
-    if game["status"] == "finished":
-        return 409, {"detail": "Game already finished. Start a new one."}
-
-    flip = random.choice(["heads", "tails"])
-    game["last_flip"] = flip
-    game["last_guess"] = data.guess
-    if data.guess == flip:
-        game["result"] = "win"
-        game["wins"] += 1
-    else:
-        game["result"] = "lose"
-        game["losses"] += 1
-
-    # partie à un seul coup → finie
-    game["status"] = "finished"
-    return game
-
-
-@api.get("/{pk}", response={200: GameOut, 404: Message})
-def get_game(request, pk: int):
-    """Obtenir l'état d'une partie."""
-    game = GAMES.get(pk)
-    if not game:
-        return 404, {"detail": "Game not found."}
-    return game
+@api.delete("/students/{pk}", response={204: None, 404: Msg})
+def delete_student(request, pk: int):
+    for i, s in enumerate(STUDENTS):
+        if s["id"] == pk:
+            STUDENTS.pop(i)
+            return 204, None
+    return 404, {"detail": "Student not found"}
